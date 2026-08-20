@@ -1,5 +1,8 @@
 from fastapi import FastAPI
 
+from backend.app.api.documents import router as documents_router
+
+
 app = FastAPI(
     title="DocuVoice",
     description="Intelligent Document and Invoice Processing System",
@@ -7,6 +10,13 @@ app = FastAPI(
 )
 
 
+app.include_router(documents_router)
+
+
 @app.get("/health")
 def health_check():
-    return {"status": "healthy"}
+    return {
+        "status": "healthy",
+        "service": "DocuVoice API",
+        "version": "0.1.0",
+    }
