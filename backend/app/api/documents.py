@@ -1,5 +1,6 @@
 from pathlib import Path
 from uuid import uuid4
+from backend.app.services.ocr.ocr_service import OCRService
 from backend.app.services.preprocessing.image_processor import ImageProcessor
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
@@ -12,6 +13,57 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg"}
 MAX_FILE_SIZE = 10 * 1024 * 1024
+
+
+@router.post("/{document_id}/ocr")
+async def process_ocr(document_id: str):
+    matching_files = list(UPLOAD_DIR.glob(f"{document_id}.*"))
+
+    if not matching_files:
+        raise HTTPException(
+            status_code=404,
+            detail="Document not found",
+        )
+
+    input_file = matching_files[0]
+
+    if input_file.suffix.lower() == ".pdf":
+        raise HTTPException(
+            status_code=400,
+            detail="PDF OCR will be handled when PDF page processing is added",
+        )
+
+    processed_file = (
+        Path("processed") / f"{document_id}_processed.png"
+    )
+
+    if not processed_file.exists():
+        raise HTTPException(
+            status_code=400,
+            detail="Document has not been preprocessed",
+        )
+
+    try:
+        ocr_service = OCRService()
+        result = ocr_service.extract(str(processed_file))
+
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=str(exc),
+        ) from exc
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"OCR processing failed: {exc}",
+        ) from exc
+
+    return {
+        "document_id": document_id,
+        "status": "processed",
+        "ocr": result,
+    }
 
 @router.post("/{document_id}/preprocess")
 async def preprocess_document(document_id: str):
