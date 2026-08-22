@@ -12,7 +12,7 @@ class DocumentExtractor:
             "document_type": self._detect_document_type(text),
             "fields": self._extract_fields(text),
             "sections": self._extract_sections(text),
-            "tables": [],
+            "tables": self._extract_tables(ocr_result),
             "entities": self._extract_entities(text),
             "text": text,
             "ocr": {
@@ -268,3 +268,138 @@ class DocumentExtractor:
         )
 
         return entities
+    #new class
+    def _extract_tables(self, ocr_result: dict) -> list:
+        words = ocr_result.get("words", [])
+
+        if not words:
+            return []
+
+        rows = self._group_words_into_rows(words)
+
+        if len(rows) < 2:
+            return []
+
+        table = self._build_table(rows)
+
+        if not table:
+            return []
+
+        return [table]
+
+    def _group_words_into_rows(self, words: list) -> list:
+        sorted_words = sorted(
+            words,
+            key=lambda word: (
+                word["y"],
+                word["x"],
+            ),
+        )
+
+        rows = []
+
+        for word in sorted_words:
+            word_center_y = (
+                word["y"] + word["height"] / 2
+            )
+
+            matched_row = None
+
+            for row in rows:
+                row_center_y = row["center_y"]
+
+                tolerance = max(
+                    word["height"],
+                    row["average_height"],
+                ) * 0.6
+
+                if abs(
+                    word_center_y - row_center_y
+                ) <= tolerance:
+                    matched_row = row
+                    break
+
+            if matched_row is None:
+                rows.append(
+                    {
+                        "center_y": word_center_y,
+                        "average_height": word["height"],
+                        "words": [word],
+                    }
+                )
+            else:
+                matched_row["words"].append(word)
+
+                heights = [
+                    item["height"]
+                    for item in matched_row["words"]
+                ]
+
+                matched_row["average_height"] = (
+                    sum(heights) / len(heights)
+                )
+
+                centers = [
+                    item["y"] + item["height"] / 2
+                    for item in matched_row["words"]
+                ]
+
+                matched_row["center_y"] = (
+                    sum(centers) / len(centers)
+                )
+
+        rows.sort(
+            key=lambda row: row["center_y"]
+        )
+
+        for row in rows:
+            row["words"].sort(
+                key=lambda word: word["x"]
+            )
+
+        return rows
+
+    def _build_table(self, rows: list) -> dict:
+        if not rows:
+            return {}
+
+        table_rows = []
+
+        for row in rows:
+            cells = []
+
+            for word in row["words"]:
+                cells.append(word["text"])
+
+            if cells:
+                table_rows.append(cells)
+
+        if len(table_rows) < 2:
+            return {}
+
+        column_count = max(
+            len(row)
+            for row in table_rows
+        )
+
+        if column_count < 2:
+            return {}
+
+        headers = table_rows[0]
+
+        normalized_rows = []
+
+        for row in table_rows[1:]:
+            normalized_row = row[:column_count]
+
+            while len(normalized_row) < column_count:
+                normalized_row.append("")
+
+            normalized_rows.append(
+                normalized_row
+            )
+
+        return {
+            "headers": headers,
+            "rows": normalized_rows,
+        }
