@@ -35,38 +35,51 @@ class DocumentExtractor:
                 "invoice",
                 "invoice number",
                 "amount due",
+                "bill to",
+                "subtotal",
+                "tax amount",
             ],
             "receipt": [
                 "receipt",
                 "cashier",
                 "thank you for your purchase",
+                "change",
+                "payment method",
             ],
             "resume": [
                 "resume",
                 "curriculum vitae",
                 "work experience",
+                "professional experience",
                 "education",
                 "skills",
+                "employment history",
             ],
             "certificate": [
                 "certificate",
                 "certify that",
                 "awarded to",
+                "this is to certify",
             ],
             "application": [
                 "application form",
                 "applicant",
                 "application number",
+                "date of birth",
             ],
             "report": [
-                "report",
                 "executive summary",
+                "introduction",
+                "methodology",
+                "findings",
                 "conclusion",
+                "recommendations",
             ],
             "letter": [
-                "dear",
+                "dear ",
                 "subject:",
                 "sincerely",
+                "regards",
             ],
         }
 
@@ -89,8 +102,10 @@ class DocumentExtractor:
             key=scores.get,
         )
 
-        if scores[best_type] == 0:
-            return "unknown"
+        best_score = scores[best_type]
+
+        if best_score == 0:
+            return "general_document"
 
         return best_type
 
@@ -188,12 +203,6 @@ class DocumentExtractor:
         if len(words) > 8:
             return False
 
-        uppercase_count = sum(
-            1
-            for char in cleaned
-            if char.isupper()
-        )
-
         alphabetic_count = sum(
             1
             for char in cleaned
@@ -203,11 +212,49 @@ class DocumentExtractor:
         if alphabetic_count == 0:
             return False
 
+        uppercase_count = sum(
+            1
+            for char in cleaned
+            if char.isupper()
+        )
+
         uppercase_ratio = (
             uppercase_count / alphabetic_count
         )
 
-        return uppercase_ratio >= 0.75
+        if uppercase_ratio >= 0.75:
+            return True
+
+        heading_keywords = {
+            "education",
+            "experience",
+            "skills",
+            "projects",
+            "certification",
+            "certifications",
+            "summary",
+            "profile",
+            "objective",
+            "introduction",
+            "background",
+            "methodology",
+            "results",
+            "findings",
+            "conclusion",
+            "recommendations",
+            "references",
+            "qualifications",
+            "achievements",
+            "contact",
+            "personal information",
+            "work experience",
+            "professional experience",
+            "academic qualifications",
+        }
+
+        normalized = " ".join(words).lower()
+
+        return normalized in heading_keywords
 
     def _extract_entities(self, text: str) -> dict:
         entities = {
@@ -272,7 +319,7 @@ class DocumentExtractor:
     def _extract_tables(self, ocr_result: dict) -> list:
         words = ocr_result.get("words", [])
 
-        if not words:
+        if len(words) < 4:
             return []
 
         rows = self._group_words_into_rows(words)
@@ -280,7 +327,18 @@ class DocumentExtractor:
         if len(rows) < 2:
             return []
 
-        table = self._build_table(rows)
+        multi_word_rows = [
+            row
+            for row in rows
+            if len(row["words"]) >= 2
+        ]
+
+        if len(multi_word_rows) < 2:
+            return []
+
+        table = self._build_table(
+            multi_word_rows
+        )
 
         if not table:
             return []
@@ -360,18 +418,18 @@ class DocumentExtractor:
         return rows
 
     def _build_table(self, rows: list) -> dict:
-        if not rows:
+        if len(rows) < 2:
             return {}
 
         table_rows = []
 
         for row in rows:
-            cells = []
+            cells = [
+                word["text"]
+                for word in row["words"]
+            ]
 
-            for word in row["words"]:
-                cells.append(word["text"])
-
-            if cells:
+            if len(cells) >= 2:
                 table_rows.append(cells)
 
         if len(table_rows) < 2:
