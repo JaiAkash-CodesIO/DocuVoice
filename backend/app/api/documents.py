@@ -64,19 +64,51 @@ async def preprocess_document(document_id: str):
             status_code=404,
             detail="Document not found",
         )
-
+#modified
     input_file = matching_files[0]
 
-    if input_file.suffix.lower() == ".pdf":
-        raise HTTPException(
-            status_code=400,
-            detail="PDF preprocessing will be handled by the OCR pipeline",
-        )
-
     processed_dir = Path("processed")
-    output_file = processed_dir / f"{document_id}_processed.png"
-
     processor = ImageProcessor()
+
+    if input_file.suffix.lower() == ".pdf":
+        try:
+            pages = processor.process_pdf(
+                str(input_file),
+                str(processed_dir),
+            )
+
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail=str(exc),
+            ) from exc
+
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=str(exc),
+            ) from exc
+
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"PDF preprocessing failed: {exc}",
+            ) from exc
+
+        return {
+            "document_id": document_id,
+            "status": "preprocessed",
+            "preprocessing": {
+                "file_type": "pdf",
+                "page_count": len(pages),
+                "pages": pages,
+            },
+        }
+
+    output_file = (
+        processed_dir
+        / f"{document_id}_processed.png"
+    )
 
     try:
         result = processor.process(
@@ -106,14 +138,92 @@ async def process_ocr(document_id: str):
 
     input_file = matching_files[0]
 
+    
+    processed_dir = Path("processed")
+    ocr_service = OCRService()
+
     if input_file.suffix.lower() == ".pdf":
-        raise HTTPException(
-            status_code=400,
-            detail="PDF OCR will be handled when PDF page processing is added",
+        processed_files = sorted(
+            processed_dir.glob(
+                f"{document_id}_page_*.png"
+            )
         )
 
+        if not processed_files:
+            raise HTTPException(
+                status_code=400,
+                detail="Document has not been preprocessed",
+            )
+
+        page_results = []
+
+        try:
+            for page_number, processed_file in enumerate(
+                processed_files,
+                start=1,
+            ):
+                result = ocr_service.extract(
+                    str(processed_file)
+                )
+
+                page_results.append(
+                    {
+                        "page_number": page_number,
+                        "text": result["text"],
+                        "average_confidence": result[
+                            "average_confidence"
+                        ],
+                        "word_count": result["word_count"],
+                        "words": result["words"],
+                    }
+                )
+
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"OCR processing failed: {exc}",
+            ) from exc
+
+        all_words = []
+
+        for page in page_results:
+            all_words.extend(page["words"])
+
+        all_text = "\n\n".join(
+            page["text"]
+            for page in page_results
+            if page["text"]
+        )
+
+        average_confidence = (
+            sum(
+                page["average_confidence"]
+                for page in page_results
+            )
+            / len(page_results)
+            if page_results
+            else 0.0
+        )
+
+        return {
+            "document_id": document_id,
+            "status": "processed",
+            "ocr": {
+                "text": all_text,
+                "average_confidence": round(
+                    average_confidence,
+                    2,
+                ),
+                "word_count": len(all_words),
+                "words": all_words,
+                "page_count": len(page_results),
+                "pages": page_results,
+            },
+        }
+
     processed_file = (
-        Path("processed") / f"{document_id}_processed.png"
+        processed_dir
+        / f"{document_id}_processed.png"
     )
 
     if not processed_file.exists():
@@ -123,8 +233,9 @@ async def process_ocr(document_id: str):
         )
 
     try:
-        ocr_service = OCRService()
-        result = ocr_service.extract(str(processed_file))
+        result = ocr_service.extract(
+            str(processed_file)
+        )
 
     except FileNotFoundError as exc:
         raise HTTPException(
@@ -160,35 +271,103 @@ async def extract_document(document_id: str):
 
     input_file = matching_files[0]
 
-    if input_file.suffix.lower() == ".pdf":
-        raise HTTPException(
-            status_code=400,
-            detail="PDF extraction will be handled when PDF page processing is added",
-        )
-
-    processed_file = (
-        Path("processed")
-        / f"{document_id}_processed.png"
-    )
-
-    if not processed_file.exists():
-        raise HTTPException(
-            status_code=400,
-            detail="Document has not been preprocessed",
-        )
-
     try:
         ocr_service = OCRService()
-
-        ocr_result = ocr_service.extract(
-            str(processed_file)
-        )
-
         extractor = DocumentExtractor()
 
-        extraction_result = extractor.extract(
-            ocr_result
-        )
+        processed_dir = Path("processed")
+
+        if input_file.suffix.lower() == ".pdf":
+            processed_files = sorted(
+                processed_dir.glob(
+                    f"{document_id}_page_*.png"
+                )
+            )
+
+            if not processed_files:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Document has not been preprocessed",
+                )
+
+            page_results = []
+
+            for page_number, processed_file in enumerate(
+                processed_files,
+                start=1,
+            ):
+                ocr_result = ocr_service.extract(
+                    str(processed_file)
+                )
+
+                page_results.append(
+                    {
+                        "page_number": page_number,
+                        "ocr": ocr_result,
+                    }
+                )
+
+            combined_text = "\n\n".join(
+                page["ocr"]["text"]
+                for page in page_results
+                if page["ocr"]["text"]
+            )
+
+            combined_words = []
+
+            for page in page_results:
+                combined_words.extend(
+                    page["ocr"]["words"]
+                )
+
+            combined_confidence = (
+                sum(
+                    page["ocr"]["average_confidence"]
+                    for page in page_results
+                )
+                / len(page_results)
+                if page_results
+                else 0.0
+            )
+
+            combined_ocr_result = {
+                "text": combined_text,
+                "average_confidence": round(
+                    combined_confidence,
+                    2,
+                ),
+                "word_count": len(combined_words),
+                "words": combined_words,
+            }
+
+            extraction_result = extractor.extract(
+                combined_ocr_result
+            )
+
+            extraction_result["pages"] = page_results
+
+        else:
+            processed_file = (
+                processed_dir
+                / f"{document_id}_processed.png"
+            )
+
+            if not processed_file.exists():
+                raise HTTPException(
+                    status_code=400,
+                    detail="Document has not been preprocessed",
+                )
+
+            ocr_result = ocr_service.extract(
+                str(processed_file)
+            )
+
+            extraction_result = extractor.extract(
+                ocr_result
+            )
+
+    except HTTPException:
+        raise
 
     except FileNotFoundError as exc:
         raise HTTPException(
@@ -207,5 +386,3 @@ async def extract_document(document_id: str):
         "status": "processed",
         "extraction": extraction_result,
     }
-
-
