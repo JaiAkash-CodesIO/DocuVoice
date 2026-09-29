@@ -246,39 +246,7 @@ class OCRService:
             else 0.0
         )
 
-        invoice_keywords = {
-            "invoice",
-            "description",
-            "price",
-            "qty",
-            "quantity",
-            "total",
-            "subtotal",
-            "tax",
-            "payment",
-            "amount",
-            "bank",
-            "account",
-        }
-
-        text_lower = text.lower()
-
-        keyword_matches = sum(
-            1
-            for keyword in invoice_keywords
-            if keyword in text_lower
-        )
-
-        keyword_score = min(
-            keyword_matches * 5,
-            30,
-        )
-
-        score = (
-            average_confidence * 0.7
-            + keyword_score
-        )
-
+        score = average_confidence
         return {
             "text": text,
             "average_confidence": round(

@@ -171,7 +171,23 @@ Before running the project, make sure you have:
 
 ## 💻 Running the Application
 
-### Start the Backend API
+### Option A: Using Docker & Docker Compose (Recommended 🚀)
+
+Run both the FastAPI backend (with Tesseract OCR pre-configured) and React frontend in a single command:
+
+```bash
+docker-compose up --build
+```
+
+- **Frontend Dashboard**: [http://localhost](http://localhost)
+- **Backend API**: [http://localhost:8000](http://localhost:8000)
+- **Swagger API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+
+---
+
+### Option B: Local Manual Setup
+
+#### 1. Start the Backend API
 
 From the root directory (with your virtual environment activated):
 ```bash
@@ -180,7 +196,7 @@ uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 - API Docs (Swagger UI): [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 - API Health Check: [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
 
-### Start the Frontend Client
+#### 2. Start the Frontend Client
 
 In a separate terminal window, navigate to `frontend` and start the Vite dev server:
 ```bash
@@ -188,6 +204,7 @@ cd frontend
 npm run dev
 ```
 Open your browser and navigate to [http://localhost:5173](http://localhost:5173).
+
 
 ---
 

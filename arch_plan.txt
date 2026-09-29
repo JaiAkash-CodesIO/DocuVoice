@@ -1,0 +1,107 @@
+                 DOCUMENT
+                    │
+          ┌─────────▼─────────┐
+          │ Image/PDF Upload  │
+          └─────────┬─────────┘
+                    │
+                    ▼
+          Document Preprocessing
+          OpenCV / PDF Processing
+                    │
+                    ▼
+              OCR ENGINE
+          PaddleOCR / Tesseract
+                    │
+                    ▼
+             Layout Analysis
+       Text + Position + Structure
+                    │
+                    ▼
+          Information Extraction
+             Transformer / NLP
+                    │
+                    ▼
+             Structured JSON
+                    │
+          ┌─────────┴─────────┐
+          ▼                   ▼
+      PostgreSQL          FastAPI
+                              │
+                              ▼
+                       Web Dashboard
+                              │
+                              ▼
+                           Docker
+                           
+                           
+                           
+                           
+// Example Invoice image
+
+Invoice Number: INV-10293
+Invoice Date: 18-08-2026
+
+Vendor:
+ABC Electronics Pvt Ltd
+
+Customer:
+XYZ Industries
+
+Items:
+-----------------------------------------
+Product       Qty      Price      Total
+Laptop         2       50,000     100,000
+Mouse         10        1,000      10,000
+-----------------------------------------
+
+Subtotal: ₹110,000
+Tax:       ₹19,800
+Total:     ₹129,800
+
+
+// Expected OCR Output(JSON)
+
+{
+    "document_type": "invoice",
+    "invoice_number": "INV-10293",
+    "invoice_date": "2026-08-18",
+    "vendor": "ABC Electronics Pvt Ltd",
+    "customer": "XYZ Industries",
+    "items": [
+        {
+            "name": "Laptop",
+            "quantity": 2,
+            "unit_price": 50000,
+            "total": 100000
+        },
+        {
+            "name": "Mouse",
+            "quantity": 10,
+            "unit_price": 1000,
+            "total": 10000
+        }
+    ],
+    "subtotal": 110000,
+    "tax": 19800,
+    "total": 129800
+}
+
+
+
+
+
+
+
+/run/media/cyrus/DATA/digisailorIntern/document_ai/uploads/4b4ac88c-471e-49b3-be22-7c0ea5b6c74c.pdf
+
+
+
+frontend structure
+
+
+
+
+
+
+
+
