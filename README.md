@@ -1,3 +1,14 @@
+---
+title: DocuVoice Intelligent Document Processing
+emoji: 📄
+colorFrom: indigo
+colorTo: blue
+sdk: docker
+app_port: 7860
+pinned: false
+license: mit
+---
+
 # DocuVoice 📄🔍
 
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)

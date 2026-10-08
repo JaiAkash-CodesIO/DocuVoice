@@ -1,5 +1,7 @@
+from pathlib import Path
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from backend.app.api.documents import router as documents_router
 from backend.app.core.config import settings
@@ -34,24 +36,6 @@ app.add_middleware(
 app.include_router(documents_router)
 
 
-@app.get(
-    "/",
-    tags=["System"],
-    summary="API Root Information",
-    description="Welcome endpoint providing API status and navigation links.",
-)
-def api_root():
-    return {
-        "service": f"{settings.PROJECT_NAME} API",
-        "version": settings.VERSION,
-        "status": "online",
-        "documentation": "/docs",
-        "redoc": "/redoc",
-        "health": "/health",
-        "samples": "/documents/samples",
-    }
-
-
 @app.get("/favicon.ico", include_in_schema=False)
 def favicon():
     return Response(status_code=204)
@@ -70,3 +54,36 @@ def health_check() -> HealthCheckResponse:
         service=f"{settings.PROJECT_NAME} API",
         version=settings.VERSION,
     )
+
+
+@app.get(
+    "/api",
+    tags=["System"],
+    summary="API Root Information",
+    description="Welcome endpoint providing API status and navigation links.",
+)
+def api_info():
+    return {
+        "service": f"{settings.PROJECT_NAME} API",
+        "version": settings.VERSION,
+        "status": "online",
+        "documentation": "/docs",
+        "redoc": "/redoc",
+        "health": "/health",
+        "samples": "/documents/samples",
+    }
+
+
+# If compiled frontend exists (e.g. Hugging Face Spaces or unified production container), mount it
+FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+if FRONTEND_DIST.exists():
+    app.mount("/", StaticFiles(directory=str(FRONTEND_DIST), html=True), name="frontend")
+else:
+    @app.get(
+        "/",
+        tags=["System"],
+        summary="API Root Information",
+        description="Welcome endpoint providing API status and navigation links.",
+    )
+    def api_root():
+        return api_info()

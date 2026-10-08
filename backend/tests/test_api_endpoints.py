@@ -4,6 +4,11 @@ from unittest.mock import patch
 def test_api_root(client):
     response = client.get("/")
     assert response.status_code == 200
+
+
+def test_api_info(client):
+    response = client.get("/api")
+    assert response.status_code == 200
     data = response.json()
     assert "DocuVoice" in data["service"]
     assert data["status"] == "online"
