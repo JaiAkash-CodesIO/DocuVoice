@@ -1,406 +1,250 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import Navbar from "./components/Navbar";
+import Dropzone from "./components/Dropzone";
+import SamplePicker from "./components/SamplePicker";
+import PipelineStepper from "./components/PipelineStepper";
+import DocumentViewer from "./components/DocumentViewer";
+import OverviewBadges from "./components/OverviewBadges";
+import ExportBar from "./components/ExportBar";
+import ResultTabs from "./components/ResultTabs";
 import "./index.css";
 
-const API_BASE_URL = "http://127.0.0.1:8000";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
 function App() {
   const [file, setFile] = useState(null);
-  const [dragging, setDragging] = useState(false);
-  const [status, setStatus] = useState("");
+  const [documentId, setDocumentId] = useState(null);
+  const [statusStep, setStatusStep] = useState(0); // 0 = idle, 1..4 = pipeline steps
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
+  const [durationMs, setDurationMs] = useState(null);
+  const [samples, setSamples] = useState([]);
 
-  const handleFile = (selectedFile) => {
+  // Fetch preloaded sample document list on load
+  useEffect(() => {
+    async function loadSamples() {
+      try {
+        const res = await fetch(`${API_BASE_URL}/documents/samples`);
+        if (res.ok) {
+          const data = await res.json();
+          setSamples(data);
+        }
+      } catch {
+        // Fallback static samples if backend is starting up
+        setSamples([
+          {
+            id: "sample-invoice",
+            name: "Standard Tech Invoice",
+            document_type: "invoice",
+            description: "Tax invoice with line-item table, vendor, customer, and tax calculations.",
+            filename: "sample_invoice.png",
+          },
+          {
+            id: "sample-receipt",
+            name: "Retail Store Receipt",
+            document_type: "receipt",
+            description: "Store receipt with transaction timestamp, cashier ID, and itemized totals.",
+            filename: "sample_receipt.png",
+          },
+          {
+            id: "sample-resume",
+            name: "Software Engineer Resume",
+            document_type: "resume",
+            description: "Professional CV with contact details, sections, skills, and work history.",
+            filename: "sample_resume.png",
+          },
+        ]);
+      }
+    }
+    loadSamples();
+  }, []);
+
+  const handleFileSelect = (selectedFile) => {
     if (!selectedFile) return;
-
-    const allowedTypes = [
-      "application/pdf",
-      "image/png",
-      "image/jpeg",
-    ];
-
-    if (!allowedTypes.includes(selectedFile.type)) {
+    const allowed = ["application/pdf", "image/png", "image/jpeg", "image/jpg"];
+    if (!allowed.includes(selectedFile.type) && !selectedFile.name.match(/\.(pdf|png|jpe?g)$/i)) {
       setError("Please select a PDF, PNG, or JPG file.");
       return;
     }
-
-    setFile(selectedFile);
-    setError("");
-    setResult(null);
-  };
-
-  const handleDrop = (event) => {
-    event.preventDefault();
-    setDragging(false);
-    handleFile(event.dataTransfer.files[0]);
-  };
-
-  const processDocument = async () => {
-    if (!file) {
-      setError("Please select a document first.");
+    if (selectedFile.size > 10 * 1024 * 1024) {
+      setError("File exceeds the 10 MB maximum limit.");
       return;
     }
+    setFile(selectedFile);
+    setError("");
+  };
+
+  const handleClearFile = () => {
+    setFile(null);
+    setError("");
+  };
+
+  const handleReset = () => {
+    setFile(null);
+    setDocumentId(null);
+    setResult(null);
+    setError("");
+    setStatusStep(0);
+    setDurationMs(null);
+  };
+
+  // Process user uploaded document using unified pipeline
+  const processUploadedDocument = async () => {
+    if (!file) return;
 
     try {
       setError("");
       setResult(null);
-      setStatus("Uploading document...");
+      setStatusStep(1);
 
       const formData = new FormData();
       formData.append("file", file);
 
-      const uploadResponse = await fetch(
-        `${API_BASE_URL}/documents/upload`,
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
+      // Advance stepper visually to show progressive pipeline
+      const stepTimer1 = setTimeout(() => setStatusStep(2), 500);
+      const stepTimer2 = setTimeout(() => setStatusStep(3), 1200);
+      const stepTimer3 = setTimeout(() => setStatusStep(4), 1800);
 
-      if (!uploadResponse.ok) {
-        throw new Error("Document upload failed.");
+      const response = await fetch(`${API_BASE_URL}/documents/process`, {
+        method: "POST",
+        body: formData,
+      });
+
+      clearTimeout(stepTimer1);
+      clearTimeout(stepTimer2);
+      clearTimeout(stepTimer3);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Document processing failed");
       }
 
-      const uploadData = await uploadResponse.json();
-      const documentId = uploadData.document_id;
-
-      setStatus("Preprocessing document...");
-
-      const preprocessResponse = await fetch(
-        `${API_BASE_URL}/documents/${documentId}/preprocess`,
-        {
-          method: "POST",
-        }
-      );
-
-      if (!preprocessResponse.ok) {
-        const data = await preprocessResponse.json();
-        throw new Error(data.detail || "Preprocessing failed.");
-      }
-
-      setStatus("Running OCR...");
-
-      const ocrResponse = await fetch(
-        `${API_BASE_URL}/documents/${documentId}/ocr`,
-        {
-          method: "POST",
-        }
-      );
-
-      if (!ocrResponse.ok) {
-        const data = await ocrResponse.json();
-        throw new Error(data.detail || "OCR processing failed.");
-      }
-
-      setStatus("Extracting document information...");
-
-      const extractionResponse = await fetch(
-        `${API_BASE_URL}/documents/${documentId}/extract`,
-        {
-          method: "POST",
-        }
-      );
-
-      if (!extractionResponse.ok) {
-        const data = await extractionResponse.json();
-        throw new Error(
-          data.detail || "Document extraction failed."
-        );
-      }
-
-      const extractionData = await extractionResponse.json();
-
-      setResult(extractionData.extraction);
-      setStatus("");
+      const data = await response.json();
+      setDocumentId(data.document_id);
+      setResult(data.extraction);
+      setDurationMs(data.duration_ms);
+      setStatusStep(0);
     } catch (err) {
-      setStatus("");
-      setError(err.message || "Something went wrong.");
+      setStatusStep(0);
+      setError(err.message || "An unexpected error occurred during processing.");
     }
   };
 
+  // Process sample document with one-click
+  const processSampleDocument = async (sampleId) => {
+    try {
+      setError("");
+      setResult(null);
+      setStatusStep(1);
+
+      const sample = samples.find((s) => s.id === sampleId);
+      if (sample) {
+        setFile({ name: sample.filename, size: 45000, type: "image/png" });
+      }
+
+      const stepTimer1 = setTimeout(() => setStatusStep(2), 400);
+      const stepTimer2 = setTimeout(() => setStatusStep(3), 900);
+      const stepTimer3 = setTimeout(() => setStatusStep(4), 1400);
+
+      const response = await fetch(
+        `${API_BASE_URL}/documents/samples/${sampleId}/process`,
+        { method: "POST" }
+      );
+
+      clearTimeout(stepTimer1);
+      clearTimeout(stepTimer2);
+      clearTimeout(stepTimer3);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Sample processing failed");
+      }
+
+      const data = await response.json();
+      setDocumentId(data.document_id);
+      setResult(data.extraction);
+      setDurationMs(data.duration_ms);
+      setStatusStep(0);
+    } catch (err) {
+      setStatusStep(0);
+      setError(err.message || "Failed to process sample document.");
+    }
+  };
+
+  const isProcessing = statusStep > 0;
+
   return (
     <div className="app">
-      <header className="header">
-        <div className="brand">
-          <div className="brand-mark">D</div>
-          <span>DocuVoice</span>
-        </div>
+      <Navbar onReset={handleReset} hasResult={Boolean(result)} />
 
-        <span className="header-label">
-          Document Extraction
-        </span>
-      </header>
-
-      <main className="main">
-        {!result ? (
-          <section className="upload-page">
-            <div className="intro">
-              <p className="eyebrow">DOCUMENT INTELLIGENCE</p>
-
-              <h1>
-                Extract useful information
-                <br />
-                from your documents.
-              </h1>
-
+      <main className="main-content">
+        {!result && !isProcessing && (
+          <section className="hero-section">
+            <div className="hero-text-block">
+              <span className="eyebrow">INTELLIGENT DOCUMENT RECOGNITION</span>
+              <h1>Extract High-Accuracy Structured Data from Any Document</h1>
               <p className="subtitle">
-                Upload a document and DocuVoice will extract
-                text, fields, sections, entities, and tables.
+                DocuVoice automatically classifies document intent, runs region-aware
+                multi-pass OCR, reconstructs table matrices, and extracts typed schema entities.
               </p>
             </div>
 
-            <div
-              className={`upload-box ${
-                dragging ? "dragging" : ""
-              }`}
-              onDragOver={(event) => {
-                event.preventDefault();
-                setDragging(true);
-              }}
-              onDragLeave={() => setDragging(false)}
-              onDrop={handleDrop}
-            >
-              <div className="upload-icon">↑</div>
+            {samples.length > 0 && (
+              <SamplePicker
+                samples={samples}
+                onSelectSample={processSampleDocument}
+                isProcessing={isProcessing}
+              />
+            )}
 
-              <h2>Upload a document</h2>
-
-              <p>
-                Drag and drop your file here, or choose one
-                from your computer.
-              </p>
-
-              <label className="choose-button">
-                Choose file
-                <input
-                  type="file"
-                  accept=".pdf,.png,.jpg,.jpeg"
-                  onChange={(event) =>
-                    handleFile(event.target.files[0])
-                  }
-                />
-              </label>
-
-              <span className="file-types">
-                PDF, PNG, JPG or JPEG · Max 10 MB
-              </span>
-
-              {file && (
-                <div className="selected-file">
-                  <span>{file.name}</span>
-                  <span>
-                    {(file.size / 1024 / 1024).toFixed(2)} MB
-                  </span>
-                </div>
-              )}
+            <div className="divider-row">
+              <span>OR UPLOAD CUSTOM FILE</span>
             </div>
 
-            {error && (
-              <div className="message error">
-                {error}
-              </div>
-            )}
-
-            {status && (
-              <div className="message status">
-                {status}
-              </div>
-            )}
-
-            <button
-              className="process-button"
-              onClick={processDocument}
-              disabled={!file || Boolean(status)}
-            >
-              {status ? "Processing..." : "Process document"}
-            </button>
+            <Dropzone
+              file={file}
+              onFileSelect={handleFileSelect}
+              onClearFile={handleClearFile}
+              onProcess={processUploadedDocument}
+              isProcessing={isProcessing}
+              error={error}
+            />
           </section>
-        ) : (
-          <section className="results-page">
-            <div className="results-header">
-              <div>
-                <p className="eyebrow">EXTRACTION RESULT</p>
-                <h1>{file?.name}</h1>
-              </div>
+        )}
 
-              <button
-                className="secondary-button"
-                onClick={() => {
-                  setResult(null);
-                  setFile(null);
-                }}
-              >
-                Process another
-              </button>
+        {isProcessing && (
+          <section className="processing-section">
+            <PipelineStepper currentStep={statusStep} />
+          </section>
+        )}
+
+        {result && (
+          <section className="results-container">
+            <div className="results-top-bar">
+              <div className="result-headline">
+                <span className="eyebrow">EXTRACTION SUMMARY</span>
+                <h2>{file?.name || "Processed Document"}</h2>
+              </div>
+              <ExportBar result={result} filename={file?.name?.replace(/\.[^/.]+$/, "")} />
             </div>
 
-            <div className="overview">
-              <div>
-                <span className="label">
-                  Document type
-                </span>
-                <strong>
-                  {result.document_type || "Unknown"}
-                </strong>
-              </div>
+            <OverviewBadges result={result} durationMs={durationMs} />
 
-              <div>
-                <span className="label">
-                  OCR confidence
-                </span>
-                <strong>
-                  {result.ocr?.average_confidence ?? 0}%
-                </strong>
-              </div>
-
-              <div>
-                <span className="label">
-                  Words detected
-                </span>
-                <strong>
-                  {result.ocr?.word_count ?? 0}
-                </strong>
-              </div>
-            </div>
-
-            <div className="results-grid">
-              <section className="result-card">
-                <h2>Fields</h2>
-
-                {result.fields?.length ? (
-                  <div className="field-list">
-                    {result.fields.map((field, index) => (
-                      <div
-                        className="field"
-                        key={index}
-                      >
-                        <span>{field.key}</span>
-                        <strong>{field.value}</strong>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="empty">
-                    No structured fields detected.
-                  </p>
-                )}
-              </section>
-
-              <section className="result-card">
-                <h2>Entities</h2>
-
-                <div className="entity-group">
-                  <span>Emails</span>
-                  <p>
-                    {result.entities?.emails?.length
-                      ? result.entities.emails.join(", ")
-                      : "None detected"}
-                  </p>
+            <div className="split-view-container">
+              {documentId && (
+                <div className="split-col-left">
+                  <DocumentViewer
+                    documentId={documentId}
+                    file={file}
+                    apiBaseUrl={API_BASE_URL}
+                  />
                 </div>
-
-                <div className="entity-group">
-                  <span>Phone numbers</span>
-                  <p>
-                    {result.entities?.phone_numbers?.length
-                      ? result.entities.phone_numbers.join(", ")
-                      : "None detected"}
-                  </p>
-                </div>
-
-                <div className="entity-group">
-                  <span>Dates</span>
-                  <p>
-                    {result.entities?.dates?.length
-                      ? result.entities.dates.join(", ")
-                      : "None detected"}
-                  </p>
-                </div>
-
-                <div className="entity-group">
-                  <span>URLs</span>
-                  <p>
-                    {result.entities?.urls?.length
-                      ? result.entities.urls.join(", ")
-                      : "None detected"}
-                  </p>
-                </div>
-              </section>
-            </div>
-
-            <section className="result-card">
-              <h2>Sections</h2>
-
-              {result.sections?.length ? (
-                <div className="sections">
-                  {result.sections.map(
-                    (section, index) => (
-                      <div
-                        className="section"
-                        key={index}
-                      >
-                        <h3>{section.title}</h3>
-                        <p>{section.content}</p>
-                      </div>
-                    )
-                  )}
-                </div>
-              ) : (
-                <p className="empty">
-                  No sections detected.
-                </p>
               )}
-            </section>
 
-            <section className="result-card">
-              <h2>Tables</h2>
-
-              {result.tables?.length ? (
-                result.tables.map((table, tableIndex) => (
-                  <div
-                    className="table-wrapper"
-                    key={tableIndex}
-                  >
-                    <table>
-                      <thead>
-                        <tr>
-                          {table.headers.map(
-                            (header, index) => (
-                              <th key={index}>
-                                {header}
-                              </th>
-                            )
-                          )}
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {table.rows.map(
-                          (row, rowIndex) => (
-                            <tr key={rowIndex}>
-                              {row.map(
-                                (cell, cellIndex) => (
-                                  <td key={cellIndex}>
-                                    {cell}
-                                  </td>
-                                )
-                              )}
-                            </tr>
-                          )
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                ))
-              ) : (
-                <p className="empty">
-                  No tables detected.
-                </p>
-              )}
-            </section>
-
-            <section className="result-card text-card">
-              <h2>Extracted text</h2>
-              <pre>{result.text || "No text detected."}</pre>
-            </section>
+              <div className={`split-col-right ${!documentId ? "full-width" : ""}`}>
+                <ResultTabs result={result} />
+              </div>
+            </div>
           </section>
         )}
       </main>

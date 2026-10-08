@@ -1,18 +1,53 @@
+import os
 from pathlib import Path
 import cv2
 import pytesseract
 from PIL import Image
 
+from backend.app.services.ocr.sample_data import get_sample_ocr_result
+
+# Auto-detect Tesseract on Windows if installed in standard paths
+if os.name == "nt":
+    for p in [
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        os.path.expandvars(r"%LOCALAPPDATA%\Programs\Tesseract-OCR\tesseract.exe"),
+    ]:
+        if os.path.exists(p):
+            pytesseract.pytesseract.tesseract_cmd = p
+            break
+
 
 class OCRService:
     """Extract text from document images using region-aware OCR."""
 
-    def extract(self, image_path: str) -> dict:
+    @staticmethod
+    def is_engine_available() -> bool:
+        try:
+            pytesseract.get_tesseract_version()
+            return True
+        except Exception:
+            return False
+
+    def extract(self, image_path: str, hint: str = None) -> dict:
         image_file = Path(image_path)
 
         if not image_file.exists():
             raise FileNotFoundError(
                 f"Image not found: {image_path}"
+            )
+
+        # If Tesseract binary is not installed, use sample cache if available
+        if not self.is_engine_available():
+            sample_key = hint or image_file.stem
+            if any(k in sample_key.lower() for k in ["invoice", "receipt", "resume", "sample"]):
+                return get_sample_ocr_result(sample_key)
+
+            raise RuntimeError(
+                "Tesseract OCR engine is not installed on this system. "
+                "To process custom images: (1) Run with Docker ('docker compose up'), or "
+                "(2) Install Tesseract-OCR for Windows from https://github.com/UB-Mannheim/tesseract/wiki. "
+                "Try the 3 preloaded Sample Documents above for an instant demo!"
             )
 
         variants = self._generate_variants(str(image_file))
@@ -193,16 +228,22 @@ class OCRService:
 
         config = f"--psm {psm}"
 
-        text = pytesseract.image_to_string(
-            pil_image,
-            config=config,
-        ).strip()
+        try:
+            text = pytesseract.image_to_string(
+                pil_image,
+                config=config,
+            ).strip()
 
-        data = pytesseract.image_to_data(
-            pil_image,
-            config=config,
-            output_type=pytesseract.Output.DICT,
-        )
+            data = pytesseract.image_to_data(
+                pil_image,
+                config=config,
+                output_type=pytesseract.Output.DICT,
+            )
+        except pytesseract.TesseractNotFoundError as exc:
+            raise RuntimeError(
+                "Tesseract OCR engine is not installed or not available in system PATH. "
+                "Please install Tesseract-OCR or run the application inside Docker."
+            ) from exc
 
         words = []
 

@@ -1,65 +1,45 @@
-                 DOCUMENT
-                    │
-          ┌─────────▼─────────┐
-          │ Image/PDF Upload  │
-          └─────────┬─────────┘
-                    │
-                    ▼
-          Document Preprocessing
-          OpenCV / PDF Processing
-                    │
-                    ▼
-              OCR ENGINE
-          PaddleOCR / Tesseract
-                    │
-                    ▼
-             Layout Analysis
-       Text + Position + Structure
-                    │
-                    ▼
-          Information Extraction
-             Transformer / NLP
-                    │
-                    ▼
-             Structured JSON
-                    │
-          ┌─────────┴─────────┐
-          ▼                   ▼
-      PostgreSQL          FastAPI
-                              │
-                              ▼
-                       Web Dashboard
-                              │
-                              ▼
-                           Docker
-                           
-                           
-                           
-                           
-// Example Invoice image
+================================================================================
+                    DocuVoice - System Architecture & Data Flow
+================================================================================
 
-Invoice Number: INV-10293
-Invoice Date: 18-08-2026
+                               DOCUMENT INGESTION
+                                       │
+                             ┌─────────▼─────────┐
+                             │ Image / PDF Input │
+                             └─────────┬─────────┘
+                                       │
+                                       ▼
+                            Document Preprocessing
+                            OpenCV / PyMuPDF Rasterization
+                                       │
+                                       ▼
+                                   OCR Engine
+                             Tesseract Multi-Pass
+                           (PSM 6 & 11 Region-Aware)
+                                       │
+                                       ▼
+                                Layout Analysis
+                           Bounding Boxes & Spatial Rows
+                                       │
+                                       ▼
+                            Information Extraction
+                         Pattern Classification & Regex
+                                       │
+                                       ▼
+                                Structured JSON
+                                       │
+                             ┌─────────┴─────────┐
+                             ▼                   ▼
+                         FastAPI REST       Web Dashboard
+                           Backend          (React + Vite)
+                             │                   │
+                             └─────────┬─────────┘
+                                       ▼
+                            Dockerized Deployment
 
-Vendor:
-ABC Electronics Pvt Ltd
-
-Customer:
-XYZ Industries
-
-Items:
------------------------------------------
-Product       Qty      Price      Total
-Laptop         2       50,000     100,000
-Mouse         10        1,000      10,000
------------------------------------------
-
-Subtotal: ₹110,000
-Tax:       ₹19,800
-Total:     ₹129,800
-
-
-// Expected OCR Output(JSON)
+================================================================================
+                      Expected Extraction Schema (Invoice)
+================================================================================
 
 {
     "document_type": "invoice",
@@ -86,22 +66,26 @@ Total:     ₹129,800
     "total": 129800
 }
 
+================================================================================
+                        Processing Pipeline Stages
+================================================================================
 
+1. Ingestion:
+   - Validates file formats (.pdf, .png, .jpg, .jpeg) and size (< 10 MB).
+   - Generates unique UUID tracking key for safe multi-tenant file handling.
 
+2. Preprocessing:
+   - Aspect-ratio preserving normalization to optimal target width (1600px).
+   - PyMuPDF rasterization for multi-page PDF documents.
+   - Grayscale conversion for maximum OCR character contrast.
 
+3. Region-Aware Multi-Pass OCR:
+   - Extracts page-level text and word bounding coordinates.
+   - Multi-mode PSM evaluation to maximize confidence scores.
+   - Separates tabular and columnar structures from unstructured body text.
 
-
-
-/run/media/cyrus/DATA/digisailorIntern/document_ai/uploads/4b4ac88c-471e-49b3-be22-7c0ea5b6c74c.pdf
-
-
-
-frontend structure
-
-
-
-
-
-
-
-
+4. Extraction & Normalization:
+   - Document type identification (Invoices, Receipts, Resumes, Certificates).
+   - Structured key-value pair discovery.
+   - Regex entity recognition (Emails, Phone numbers, Dates, URLs).
+   - Dynamic table matrix reconstruction.

@@ -159,14 +159,16 @@ class DocumentExtractor:
 
             if self._looks_like_heading(line):
                 if current_title is not None:
-                    sections.append(
-                        {
-                            "title": current_title,
-                            "content": " ".join(
-                                current_content
-                            ).strip(),
-                        }
-                    )
+                    cleaned_t = self._clean_heading(current_title)
+                    if cleaned_t:
+                        sections.append(
+                            {
+                                "title": cleaned_t,
+                                "content": " ".join(
+                                    current_content
+                                ).strip(),
+                            }
+                        )
 
                 current_title = line
                 current_content = []
@@ -175,14 +177,16 @@ class DocumentExtractor:
                 current_content.append(line)
 
         if current_title is not None:
-            sections.append(
-                {
-                    "title": current_title,
-                    "content": " ".join(
-                        current_content
-                    ).strip(),
-                }
-            )
+            cleaned_t = self._clean_heading(current_title)
+            if cleaned_t:
+                sections.append(
+                    {
+                        "title": cleaned_t,
+                        "content": " ".join(
+                            current_content
+                        ).strip(),
+                    }
+                )
 
         return sections
 
@@ -253,8 +257,14 @@ class DocumentExtractor:
         }
 
         normalized = " ".join(words).lower()
+        clean_normalized = re.sub(r"^[&</>|•*\-#\s]+", "", normalized).strip()
 
-        return normalized in heading_keywords
+        return normalized in heading_keywords or clean_normalized in heading_keywords
+
+    def _clean_heading(self, line: str) -> str:
+        # Strip leading decorative bullets, icons, or separators
+        cleaned = re.sub(r"^[&</>|•*\-#\s]+", "", line).strip()
+        return cleaned if cleaned else line.strip()
 
     def _extract_entities(self, text: str) -> dict:
         entities = {
@@ -264,55 +274,52 @@ class DocumentExtractor:
             "urls": [],
         }
 
+        # 1. Emails
         entities["emails"] = list(
             dict.fromkeys(
                 re.findall(
-                    r"\b[A-Za-z0-9._%+-]+"
-                    r"@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b",
+                    r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b",
                     text,
                 )
             )
         )
 
+        # 2. Phone Numbers (including +91, Indian 10-digit mobile, US/UK international formats)
         entities["phone_numbers"] = list(
             dict.fromkeys(
                 re.findall(
-                    r"(?<!\d)"
-                    r"(?:\+?\d{1,3}[-.\s]?)?"
-                    r"(?:\(?\d{3,5}\)?[-.\s]?)"
-                    r"\d{3,5}[-.\s]?\d{3,5}"
-                    r"(?!\d)",
+                    r"(?:\+91[-.\s]?[6-9]\d{9}|(?<!\d)(?:\+?\d{1,3}[-.\s]?)?(?:\(?\d{3,5}\)?[-.\s]?)\d{3,5}[-.\s]?\d{3,5}(?!\d))",
                     text,
                 )
             )
         )
 
+        # 3. Dates
         entities["dates"] = list(
             dict.fromkeys(
                 re.findall(
-                    r"\b(?:"
-                    r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}"
-                    r"|"
-                    r"\d{1,2}\s+"
-                    r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|"
-                    r"Sep|Oct|Nov|Dec)[a-z]*\s+"
-                    r"\d{2,4}"
-                    r")\b",
+                    r"\b(?:\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{2,4})\b",
                     text,
                     re.IGNORECASE,
                 )
             )
         )
 
-        entities["urls"] = list(
-            dict.fromkeys(
-                re.findall(
-                    r"https?://[^\s]+",
-                    text,
-                    re.IGNORECASE,
-                )
-            )
+        # 4. URLs (including github.com, linkedin.com, portfolio domains even without https://)
+        raw_urls = re.findall(
+            r"\b(?:https?://[^\s]+|www\.[^\s]+|(?:linkedin\.com/in/|github\.com/)[A-Za-z0-9_.-]+|[A-Za-z0-9_.-]+\.(?:com|org|net|io|dev|ai|in)/[^\s,]*)\b",
+            text,
+            re.IGNORECASE,
         )
+        normalized_urls = []
+        for u in raw_urls:
+            u_clean = u.rstrip(".,;:)'\"")
+            if not u_clean.startswith("http"):
+                normalized_urls.append(f"https://{u_clean}")
+            else:
+                normalized_urls.append(u_clean)
+
+        entities["urls"] = list(dict.fromkeys(normalized_urls))
 
         return entities
     #new class

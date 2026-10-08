@@ -18,11 +18,12 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir --default-timeout=100 -r requirements.txt
 
-# Copy application source code
+# Copy application source code and samples
 COPY backend ./backend
+COPY samples ./samples
 
 # Create runtime directories for uploads and processed files
-RUN mkdir -p uploads processed
+RUN mkdir -p uploads processed samples
 
 EXPOSE 8000
 

@@ -1,0 +1,33 @@
+from backend.app.schemas.document import (
+    DocumentExtractionResponse,
+    DocumentOCRResponse,
+    DocumentPreprocessResponse,
+    DocumentUploadResponse,
+    EntitiesData,
+    ExtractionResult,
+    FieldItem,
+    HealthCheckResponse,
+    OCRResult,
+    PipelineProcessResponse,
+    SampleDocumentItem,
+    SectionItem,
+    TableStructure,
+    WordBox,
+)
+
+__all__ = [
+    "WordBox",
+    "FieldItem",
+    "SectionItem",
+    "TableStructure",
+    "EntitiesData",
+    "OCRResult",
+    "ExtractionResult",
+    "DocumentUploadResponse",
+    "DocumentPreprocessResponse",
+    "DocumentOCRResponse",
+    "DocumentExtractionResponse",
+    "PipelineProcessResponse",
+    "SampleDocumentItem",
+    "HealthCheckResponse",
+]
