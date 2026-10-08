@@ -75,3 +75,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+
+*.png
+*.pdf
+*.jpg
+*.jpeg
