@@ -23,7 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Create Hugging Face Spaces non-root user (UID 1000)
+# Create non-root user (UID 1000)
 RUN useradd -m -u 1000 user
 WORKDIR /app
 
@@ -31,17 +31,18 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy backend, sample documents, and compiled React frontend
+# Copy backend application and compiled React frontend
 COPY backend ./backend
-COPY samples ./samples
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
-# Set permissions for upload storage directories
-RUN mkdir -p uploads processed && chown -R user:user /app
+# Create runtime directories, generate sample documents, and set user permissions
+RUN mkdir -p uploads processed samples && \
+    python backend/generate_samples.py && \
+    chown -R user:user /app
 
 USER user
 
 EXPOSE 7860
 
-# Start unified FastAPI server serving both API & UI on port 7860
-CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "7860"]
+# Start unified server serving both API & UI on port 7860 (or $PORT)
+CMD ["sh", "-c", "uvicorn backend.app.main:app --host 0.0.0.0 --port ${PORT:-7860}"]
