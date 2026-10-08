@@ -32,8 +32,10 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run Backend Pytest Suite
+        env:
+          PYTHONPATH: .
         run: |
-          pytest backend/tests -v
+          python -m pytest backend/tests -v
 
   frontend-build:
     name: Frontend Lint & Production Build
